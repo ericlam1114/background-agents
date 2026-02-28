@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RepoImageStore } from "./repo-images";
+import { StoreValidationError } from "./errors";
 
 type RepoImageRow = {
   id: string;
@@ -270,6 +271,50 @@ describe("RepoImageStore", () => {
       expect(status[0].repo_owner).toBe("acme");
       expect(status[0].repo_name).toBe("myrepo");
     });
+
+    it("throws validation error when id is empty", async () => {
+      await expect(
+        store.registerBuild({
+          id: "",
+          repoOwner: "owner",
+          repoName: "repo",
+          baseBranch: "main",
+        })
+      ).rejects.toThrow(StoreValidationError);
+    });
+
+    it("throws validation error when repoOwner is empty", async () => {
+      await expect(
+        store.registerBuild({
+          id: "img-1",
+          repoOwner: "",
+          repoName: "repo",
+          baseBranch: "main",
+        })
+      ).rejects.toThrow(StoreValidationError);
+    });
+
+    it("throws validation error when repoName is empty", async () => {
+      await expect(
+        store.registerBuild({
+          id: "img-1",
+          repoOwner: "owner",
+          repoName: "",
+          baseBranch: "main",
+        })
+      ).rejects.toThrow(StoreValidationError);
+    });
+
+    it("throws validation error when baseBranch is empty", async () => {
+      await expect(
+        store.registerBuild({
+          id: "img-1",
+          repoOwner: "owner",
+          repoName: "repo",
+          baseBranch: "",
+        })
+      ).rejects.toThrow(StoreValidationError);
+    });
   });
 
   describe("markReady", () => {
@@ -291,6 +336,24 @@ describe("RepoImageStore", () => {
       expect(ready!.base_sha).toBe("sha123");
       expect(ready!.build_duration_seconds).toBe(45.2);
       expect(ready!.status).toBe("ready");
+    });
+
+    it("throws validation error when buildId is empty", async () => {
+      await expect(store.markReady("", "modal-img-abc", "sha123", 45.2)).rejects.toThrow(
+        StoreValidationError
+      );
+    });
+
+    it("throws validation error when providerImageId is empty", async () => {
+      await expect(store.markReady("img-1", "", "sha123", 45.2)).rejects.toThrow(
+        StoreValidationError
+      );
+    });
+
+    it("throws validation error when baseSha is empty", async () => {
+      await expect(store.markReady("img-1", "modal-img-abc", "", 45.2)).rejects.toThrow(
+        StoreValidationError
+      );
     });
 
     it("replaces previous ready image and returns its ID", async () => {
@@ -353,6 +416,14 @@ describe("RepoImageStore", () => {
       expect(status[0].status).toBe("failed");
       expect(status[0].error_message).toBe("npm install failed");
     });
+
+    it("throws validation error when buildId is empty", async () => {
+      await expect(store.markFailed("", "error message")).rejects.toThrow(StoreValidationError);
+    });
+
+    it("throws validation error when error message is empty", async () => {
+      await expect(store.markFailed("img-1", "")).rejects.toThrow(StoreValidationError);
+    });
   });
 
   describe("getLatestReady", () => {
@@ -400,6 +471,14 @@ describe("RepoImageStore", () => {
       const result = await store.getLatestReady("ACME", "REPO");
       expect(result).not.toBeNull();
     });
+
+    it("throws validation error when repoOwner is empty", async () => {
+      await expect(store.getLatestReady("", "repo")).rejects.toThrow(StoreValidationError);
+    });
+
+    it("throws validation error when repoName is empty", async () => {
+      await expect(store.getLatestReady("owner", "")).rejects.toThrow(StoreValidationError);
+    });
   });
 
   describe("getStatus", () => {
@@ -429,6 +508,14 @@ describe("RepoImageStore", () => {
       expect(status).toHaveLength(2);
       expect(status[0].id).toBe("img-2");
       expect(status[1].id).toBe("img-1");
+    });
+
+    it("throws validation error when repoOwner is empty", async () => {
+      await expect(store.getStatus("", "repo")).rejects.toThrow(StoreValidationError);
+    });
+
+    it("throws validation error when repoName is empty", async () => {
+      await expect(store.getStatus("owner", "")).rejects.toThrow(StoreValidationError);
     });
   });
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { RepoMetadataStore } from "./repo-metadata";
+import { StoreValidationError } from "./errors";
 
 type RepoMetadataRow = {
   repo_owner: string;
@@ -8,12 +9,15 @@ type RepoMetadataRow = {
   aliases: string | null;
   channel_associations: string | null;
   keywords: string | null;
+  image_build_enabled: number;
   created_at: number;
   updated_at: number;
 };
 
 const QUERY_PATTERNS = {
   SELECT_BY_PK: /^SELECT \* FROM repo_metadata WHERE repo_owner = \? AND repo_name = \?$/,
+  SELECT_IMAGE_BUILD_ENABLED:
+    /^SELECT repo_owner, repo_name FROM repo_metadata WHERE image_build_enabled = 1$/,
   UPSERT: /^INSERT INTO repo_metadata/,
 } as const;
 
@@ -52,6 +56,16 @@ class FakeD1Database {
       return row ? [row] : [];
     }
 
+    if (QUERY_PATTERNS.SELECT_IMAGE_BUILD_ENABLED.test(normalized)) {
+      const results = [];
+      for (const row of this.rows.values()) {
+        if (row.image_build_enabled === 1) {
+          results.push({ repo_owner: row.repo_owner, repo_name: row.repo_name });
+        }
+      }
+      return results;
+    }
+
     throw new Error(`Unexpected all() query: ${query}`);
   }
 
@@ -59,37 +73,63 @@ class FakeD1Database {
     const normalized = normalizeQuery(query);
 
     if (QUERY_PATTERNS.UPSERT.test(normalized)) {
-      const [
-        owner,
-        name,
-        description,
-        aliases,
-        channelAssociations,
-        keywords,
-        createdAt,
-        updatedAt,
-      ] = args as [
-        string,
-        string,
-        string | null,
-        string | null,
-        string | null,
-        string | null,
-        number,
-        number,
-      ];
-      const key = this.rowKey(owner, name);
+      const key = this.rowKey(args[0] as string, args[1] as string);
       const existing = this.rows.get(key);
-      this.rows.set(key, {
-        repo_owner: owner,
-        repo_name: name,
-        description,
-        aliases,
-        channel_associations: channelAssociations,
-        keywords,
-        created_at: existing ? existing.created_at : createdAt,
-        updated_at: updatedAt,
-      });
+
+      // Handle different upsert formats (with description/aliases OR image_build_enabled)
+      if (args.length === 8) {
+        // Full metadata upsert
+        const [
+          owner,
+          name,
+          description,
+          aliases,
+          channelAssociations,
+          keywords,
+          createdAt,
+          updatedAt,
+        ] = args as [
+          string,
+          string,
+          string | null,
+          string | null,
+          string | null,
+          string | null,
+          number,
+          number,
+        ];
+        this.rows.set(key, {
+          repo_owner: owner,
+          repo_name: name,
+          description,
+          aliases,
+          channel_associations: channelAssociations,
+          keywords,
+          image_build_enabled: existing?.image_build_enabled ?? 0,
+          created_at: existing ? existing.created_at : createdAt,
+          updated_at: updatedAt,
+        });
+      } else if (args.length === 5) {
+        // Image build enabled upsert
+        const [owner, name, imageBuildEnabled, createdAt, updatedAt] = args as [
+          string,
+          string,
+          number,
+          number,
+          number,
+        ];
+        this.rows.set(key, {
+          repo_owner: owner,
+          repo_name: name,
+          description: existing?.description ?? null,
+          aliases: existing?.aliases ?? null,
+          channel_associations: existing?.channel_associations ?? null,
+          keywords: existing?.keywords ?? null,
+          image_build_enabled: imageBuildEnabled,
+          created_at: existing ? existing.created_at : createdAt,
+          updated_at: updatedAt,
+        });
+      }
       return { meta: { changes: 1 } };
     }
 
@@ -182,6 +222,14 @@ describe("RepoMetadataStore", () => {
       expect(result).not.toBeNull();
       expect(result?.description).toBe("test");
     });
+
+    it("throws validation error when owner is empty", async () => {
+      await expect(store.get("", "repo")).rejects.toThrow(StoreValidationError);
+    });
+
+    it("throws validation error when name is empty", async () => {
+      await expect(store.get("owner", "")).rejects.toThrow(StoreValidationError);
+    });
   });
 
   describe("upsert", () => {
@@ -198,6 +246,18 @@ describe("RepoMetadataStore", () => {
       const result = await store.get("owner", "repo");
       expect(result?.description).toBe("updated");
       expect(result?.aliases).toEqual(["alias1"]);
+    });
+
+    it("throws validation error when owner is empty", async () => {
+      await expect(store.upsert("", "repo", { description: "test" })).rejects.toThrow(
+        StoreValidationError
+      );
+    });
+
+    it("throws validation error when name is empty", async () => {
+      await expect(store.upsert("owner", "", { description: "test" })).rejects.toThrow(
+        StoreValidationError
+      );
     });
   });
 
@@ -222,6 +282,28 @@ describe("RepoMetadataStore", () => {
       expect(result.get("owner/repo2")?.description).toBe("Second");
       expect(result.get("owner/repo2")?.keywords).toEqual(["kw"]);
       expect(result.has("owner/repo3")).toBe(false);
+    });
+  });
+
+  describe("setImageBuildEnabled", () => {
+    it("enables image build for a repository", async () => {
+      await store.setImageBuildEnabled("owner", "repo", true);
+      const repos = await store.getImageBuildEnabledRepos();
+      expect(repos).toHaveLength(1);
+      expect(repos[0].repoOwner).toBe("owner");
+      expect(repos[0].repoName).toBe("repo");
+    });
+
+    it("throws validation error when owner is empty", async () => {
+      await expect(store.setImageBuildEnabled("", "repo", true)).rejects.toThrow(
+        StoreValidationError
+      );
+    });
+
+    it("throws validation error when name is empty", async () => {
+      await expect(store.setImageBuildEnabled("owner", "", true)).rejects.toThrow(
+        StoreValidationError
+      );
     });
   });
 });
