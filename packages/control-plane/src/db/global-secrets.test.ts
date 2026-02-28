@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { webcrypto } from "node:crypto";
 import { GlobalSecretsStore } from "./global-secrets";
 import { SecretsValidationError } from "./secrets-validation";
+import { StoreOperationError } from "./errors";
 import { generateEncryptionKey } from "../auth/crypto";
 
 let didPolyfillCrypto = false;
@@ -209,5 +210,72 @@ describe("GlobalSecretsStore", () => {
   it("returns false when deleting nonexistent key", async () => {
     const deleted = await store.deleteSecret("NOPE");
     expect(deleted).toBe(false);
+  });
+
+  describe("input validation", () => {
+    it("rejects empty secrets object", async () => {
+      await expect(store.setSecrets({})).rejects.toThrow(SecretsValidationError);
+      await expect(store.setSecrets({})).rejects.toThrow("input is empty");
+    });
+
+    it("rejects empty string key", async () => {
+      await expect(store.setSecrets({ "": "value" })).rejects.toThrow(SecretsValidationError);
+      await expect(store.setSecrets({ "": "value" })).rejects.toThrow("key cannot be empty");
+    });
+
+    it("rejects whitespace-only key", async () => {
+      await expect(store.setSecrets({ "   ": "value" })).rejects.toThrow(SecretsValidationError);
+      await expect(store.setSecrets({ "   ": "value" })).rejects.toThrow("key cannot be empty");
+    });
+
+    it("rejects empty string value", async () => {
+      await expect(store.setSecrets({ FOO: "" })).rejects.toThrow(SecretsValidationError);
+      await expect(store.setSecrets({ FOO: "" })).rejects.toThrow(
+        "value for key 'FOO' cannot be empty"
+      );
+    });
+
+    it("rejects empty key in deleteSecret", async () => {
+      await expect(store.deleteSecret("")).rejects.toThrow(SecretsValidationError);
+      await expect(store.deleteSecret("")).rejects.toThrow("key cannot be empty");
+    });
+  });
+
+  describe("database error handling", () => {
+    it("wraps D1 errors in StoreOperationError on setSecrets", async () => {
+      const errorDb = {
+        prepare: () => ({
+          all: async () => {
+            throw new Error("D1 connection failed");
+          },
+        }),
+      };
+      const errorStore = new GlobalSecretsStore(
+        errorDb as unknown as D1Database,
+        generateEncryptionKey()
+      );
+
+      await expect(errorStore.setSecrets({ FOO: "bar" })).rejects.toThrow(StoreOperationError);
+      await expect(errorStore.setSecrets({ FOO: "bar" })).rejects.toThrow(
+        "Failed to fetch existing secrets"
+      );
+    });
+
+    it("wraps D1 errors in StoreOperationError on listSecretKeys", async () => {
+      const errorDb = {
+        prepare: () => ({
+          all: async () => {
+            throw new Error("D1 query failed");
+          },
+        }),
+      };
+      const errorStore = new GlobalSecretsStore(
+        errorDb as unknown as D1Database,
+        generateEncryptionKey()
+      );
+
+      await expect(errorStore.listSecretKeys()).rejects.toThrow(StoreOperationError);
+      await expect(errorStore.listSecretKeys()).rejects.toThrow("Failed to list secret keys");
+    });
   });
 });
