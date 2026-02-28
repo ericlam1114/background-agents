@@ -35,17 +35,24 @@ export class OpenAITokenRefreshService {
     try {
       tokenState = await readTokenState();
     } catch (e) {
-      if (e instanceof StoreOperationError) {
+      if (e instanceof StoreValidationError) {
+        this.log.error("Failed to read OpenAI token state from secrets (validation error)", {
+          error: e.message,
+          field: e.field,
+        });
+        return { ok: false, status: 400, error: `Validation error: ${e.message}` };
+      } else if (e instanceof StoreOperationError) {
         this.log.error("Failed to read OpenAI token state from secrets", {
           error: e.message,
           cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
         });
+        return { ok: false, status: 500, error: "Failed to read token state" };
       } else {
         this.log.error("Failed to read OpenAI token state from secrets", {
           error: e instanceof Error ? e.message : String(e),
         });
+        return { ok: false, status: 500, error: "Failed to read token state" };
       }
-      return { ok: false, status: 500, error: "Failed to read token state" };
     }
 
     if (!tokenState) {
@@ -211,7 +218,12 @@ export class OpenAITokenRefreshService {
         return this.attemptRefresh(reread, session);
       }
     } catch (retryErr) {
-      if (retryErr instanceof StoreOperationError) {
+      if (retryErr instanceof StoreValidationError) {
+        this.log.error("Retry after 401 also failed (validation error)", {
+          error: retryErr.message,
+          field: retryErr.field,
+        });
+      } else if (retryErr instanceof StoreOperationError) {
         this.log.error("Retry after 401 also failed", {
           error: retryErr.message,
           cause: retryErr.cause instanceof Error ? retryErr.cause.message : String(retryErr.cause),
