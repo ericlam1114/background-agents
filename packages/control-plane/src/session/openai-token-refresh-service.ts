@@ -5,6 +5,7 @@ import {
 } from "../auth/openai";
 import { GlobalSecretsStore } from "../db/global-secrets";
 import { RepoSecretsStore } from "../db/repo-secrets";
+import { StoreValidationError, StoreOperationError } from "../db/errors";
 import type { Env } from "../types";
 import type { Logger } from "../logger";
 import type { SessionRow } from "./types";
@@ -34,9 +35,16 @@ export class OpenAITokenRefreshService {
     try {
       tokenState = await readTokenState();
     } catch (e) {
-      this.log.error("Failed to read OpenAI token state from secrets", {
-        error: e instanceof Error ? e.message : String(e),
-      });
+      if (e instanceof StoreOperationError) {
+        this.log.error("Failed to read OpenAI token state from secrets", {
+          error: e.message,
+          cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+        });
+      } else {
+        this.log.error("Failed to read OpenAI token state from secrets", {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
       return { ok: false, status: 500, error: "Failed to read token state" };
     }
 
@@ -149,9 +157,21 @@ export class OpenAITokenRefreshService {
         has_account_id: !!accountId,
       });
     } catch (e) {
-      this.log.error("Failed to store rotated OpenAI tokens", {
-        error: e instanceof Error ? e.message : String(e),
-      });
+      if (e instanceof StoreValidationError) {
+        this.log.error("Failed to store rotated OpenAI tokens (validation error)", {
+          error: e.message,
+          field: e.field,
+        });
+      } else if (e instanceof StoreOperationError) {
+        this.log.error("Failed to store rotated OpenAI tokens", {
+          error: e.message,
+          cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+        });
+      } else {
+        this.log.error("Failed to store rotated OpenAI tokens", {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
     }
 
     return {
@@ -191,9 +211,16 @@ export class OpenAITokenRefreshService {
         return this.attemptRefresh(reread, session);
       }
     } catch (retryErr) {
-      this.log.error("Retry after 401 also failed", {
-        error: retryErr instanceof Error ? retryErr.message : String(retryErr),
-      });
+      if (retryErr instanceof StoreOperationError) {
+        this.log.error("Retry after 401 also failed", {
+          error: retryErr.message,
+          cause: retryErr.cause instanceof Error ? retryErr.cause.message : String(retryErr.cause),
+        });
+      } else {
+        this.log.error("Retry after 401 also failed", {
+          error: retryErr instanceof Error ? retryErr.message : String(retryErr),
+        });
+      }
     }
 
     return { ok: false, status: 401, error: "OpenAI token refresh failed: unauthorized" };

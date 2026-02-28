@@ -3,6 +3,7 @@
  */
 
 import { RepoMetadataStore } from "../db/repo-metadata";
+import { StoreValidationError, StoreOperationError } from "../db/errors";
 import type { Env } from "../types";
 import type {
   EnrichedRepository,
@@ -72,10 +73,18 @@ async function refreshReposCache(env: Env, traceId?: string): Promise<void> {
       repos.map((r) => ({ owner: r.owner, name: r.name }))
     );
   } catch (e) {
-    logger.warn("Failed to fetch repo metadata batch (background refresh)", {
-      trace_id: traceId,
-      error: e instanceof Error ? e : String(e),
-    });
+    if (e instanceof StoreOperationError) {
+      logger.warn("Failed to fetch repo metadata batch (background refresh)", {
+        trace_id: traceId,
+        error: e.message,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+      });
+    } else {
+      logger.warn("Failed to fetch repo metadata batch (background refresh)", {
+        trace_id: traceId,
+        error: e instanceof Error ? e : String(e),
+      });
+    }
     metadataMap = new Map();
   }
 
@@ -179,9 +188,16 @@ async function handleListRepos(
       repos.map((r) => ({ owner: r.owner, name: r.name }))
     );
   } catch (e) {
-    logger.warn("Failed to fetch repo metadata batch", {
-      error: e instanceof Error ? e : String(e),
-    });
+    if (e instanceof StoreOperationError) {
+      logger.warn("Failed to fetch repo metadata batch", {
+        error: e.message,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+      });
+    } else {
+      logger.warn("Failed to fetch repo metadata batch", {
+        error: e instanceof Error ? e : String(e),
+      });
+    }
     metadataMap = new Map();
   }
 
@@ -259,6 +275,16 @@ async function handleUpdateRepoMetadata(
       metadata,
     });
   } catch (e) {
+    if (e instanceof StoreValidationError) {
+      return error(e.message, 400);
+    }
+    if (e instanceof StoreOperationError) {
+      logger.error("Failed to update repo metadata", {
+        error: e.message,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+      });
+      return error("Failed to update repo metadata", 500);
+    }
     logger.error("Failed to update repo metadata", {
       error: e instanceof Error ? e : String(e),
     });
@@ -293,6 +319,13 @@ async function handleGetRepoMetadata(
       metadata: metadata ?? null,
     });
   } catch (e) {
+    if (e instanceof StoreOperationError) {
+      logger.error("Failed to get repo metadata", {
+        error: e.message,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+      });
+      return error("Failed to get repo metadata", 500);
+    }
     logger.error("Failed to get repo metadata", { error: e instanceof Error ? e : String(e) });
     return error("Failed to get metadata", 500);
   }

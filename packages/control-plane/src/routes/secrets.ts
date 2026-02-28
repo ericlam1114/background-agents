@@ -5,6 +5,7 @@
 import { RepoSecretsStore } from "../db/repo-secrets";
 import { GlobalSecretsStore } from "../db/global-secrets";
 import { SecretsValidationError, normalizeKey, validateKey } from "../db/secrets-validation";
+import { StoreValidationError, StoreOperationError } from "../db/errors";
 import type { Env } from "../types";
 import { SourceControlProviderError } from "../source-control";
 import { createLogger } from "../logger";
@@ -104,8 +105,23 @@ async function handleSetRepoSecrets(
       updated: result.updated,
     });
   } catch (e) {
+    if (e instanceof StoreValidationError) {
+      return error(e.message, 400);
+    }
     if (e instanceof SecretsValidationError) {
       return error(e.message, 400);
+    }
+    if (e instanceof StoreOperationError) {
+      logger.error("Failed to update repo secrets", {
+        error: e.message,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+        repo_id: resolved.repoId,
+        repo_owner: resolved.repoOwner,
+        repo_name: resolved.repoName,
+        request_id: ctx.request_id,
+        trace_id: ctx.trace_id,
+      });
+      return error("Failed to update repo secrets", 500);
     }
     logger.error("Failed to update repo secrets", {
       error: e instanceof Error ? e.message : String(e),
@@ -193,6 +209,18 @@ async function handleListRepoSecrets(
       globalSecrets,
     });
   } catch (e) {
+    if (e instanceof StoreOperationError) {
+      logger.error("Failed to list repo secrets", {
+        error: e.message,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+        repo_id: resolved.repoId,
+        repo_owner: resolved.repoOwner,
+        repo_name: resolved.repoName,
+        request_id: ctx.request_id,
+        trace_id: ctx.trace_id,
+      });
+      return error("Failed to list repo secrets", 500);
+    }
     logger.error("Failed to list repo secrets", {
       error: e instanceof Error ? e.message : String(e),
       repo_id: resolved.repoId,
@@ -275,8 +303,23 @@ async function handleDeleteRepoSecret(
       key: normalizedKey,
     });
   } catch (e) {
+    if (e instanceof StoreValidationError) {
+      return error(e.message, 400);
+    }
     if (e instanceof SecretsValidationError) {
       return error(e.message, 400);
+    }
+    if (e instanceof StoreOperationError) {
+      logger.error("Failed to delete repo secret", {
+        error: e.message,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+        repo_id: resolved.repoId,
+        repo_owner: resolved.repoOwner,
+        repo_name: resolved.repoName,
+        request_id: ctx.request_id,
+        trace_id: ctx.trace_id,
+      });
+      return error("Failed to delete repo secret", 500);
     }
     logger.error("Failed to delete repo secret", {
       error: e instanceof Error ? e.message : String(e),
@@ -335,8 +378,20 @@ async function handleSetGlobalSecrets(
       updated: result.updated,
     });
   } catch (e) {
+    if (e instanceof StoreValidationError) {
+      return error(e.message, 400);
+    }
     if (e instanceof SecretsValidationError) {
       return error(e.message, 400);
+    }
+    if (e instanceof StoreOperationError) {
+      logger.error("Failed to update global secrets", {
+        error: e.message,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+        request_id: ctx.request_id,
+        trace_id: ctx.trace_id,
+      });
+      return error("Failed to update global secrets", 500);
     }
     logger.error("Failed to update global secrets", {
       error: e instanceof Error ? e.message : String(e),
@@ -374,6 +429,15 @@ async function handleListGlobalSecrets(
 
     return json({ secrets });
   } catch (e) {
+    if (e instanceof StoreOperationError) {
+      logger.error("Failed to list global secrets", {
+        error: e.message,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+        request_id: ctx.request_id,
+        trace_id: ctx.trace_id,
+      });
+      return error("Failed to list global secrets", 500);
+    }
     logger.error("Failed to list global secrets", {
       error: e instanceof Error ? e.message : String(e),
       request_id: ctx.request_id,
@@ -424,8 +488,20 @@ async function handleDeleteGlobalSecret(
       key: normalizedKey,
     });
   } catch (e) {
+    if (e instanceof StoreValidationError) {
+      return error(e.message, 400);
+    }
     if (e instanceof SecretsValidationError) {
       return error(e.message, 400);
+    }
+    if (e instanceof StoreOperationError) {
+      logger.error("Failed to delete global secret", {
+        error: e.message,
+        cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+        request_id: ctx.request_id,
+        trace_id: ctx.trace_id,
+      });
+      return error("Failed to delete global secret", 500);
     }
     logger.error("Failed to delete global secret", {
       error: e instanceof Error ? e.message : String(e),
