@@ -4,6 +4,7 @@ import {
   IntegrationSettingsValidationError,
   isValidIntegrationId,
 } from "./integration-settings";
+import { StoreValidationError, StoreOperationError } from "./errors";
 
 type GlobalRow = {
   integration_id: string;
@@ -292,6 +293,23 @@ describe("IntegrationSettingsStore", () => {
         })
       ).resolves.not.toThrow();
     });
+
+    it("rejects empty integrationId on getGlobal", async () => {
+      await expect(store.getGlobal("" as any)).rejects.toThrow(StoreValidationError);
+      await expect(store.getGlobal("" as any)).rejects.toThrow("Integration ID cannot be empty");
+    });
+
+    it("rejects empty integrationId on setGlobal", async () => {
+      await expect(store.setGlobal("" as any, {})).rejects.toThrow(StoreValidationError);
+      await expect(store.setGlobal("" as any, {})).rejects.toThrow(
+        "Integration ID cannot be empty"
+      );
+    });
+
+    it("rejects empty integrationId on deleteGlobal", async () => {
+      await expect(store.deleteGlobal("" as any)).rejects.toThrow(StoreValidationError);
+      await expect(store.deleteGlobal("" as any)).rejects.toThrow("Integration ID cannot be empty");
+    });
   });
 
   describe("per-repo CRUD", () => {
@@ -410,6 +428,61 @@ describe("IntegrationSettingsStore", () => {
           commentActionInstructions: true as unknown as string,
         })
       ).rejects.toThrow(IntegrationSettingsValidationError);
+    });
+
+    it("rejects empty integrationId on getRepoSettings", async () => {
+      await expect(store.getRepoSettings("" as any, "acme/widgets")).rejects.toThrow(
+        StoreValidationError
+      );
+      await expect(store.getRepoSettings("" as any, "acme/widgets")).rejects.toThrow(
+        "Integration ID cannot be empty"
+      );
+    });
+
+    it("rejects empty repo on getRepoSettings", async () => {
+      await expect(store.getRepoSettings("github", "")).rejects.toThrow(StoreValidationError);
+      await expect(store.getRepoSettings("github", "")).rejects.toThrow(
+        "Repository identifier cannot be empty"
+      );
+    });
+
+    it("rejects empty integrationId on setRepoSettings", async () => {
+      await expect(store.setRepoSettings("" as any, "acme/widgets", {})).rejects.toThrow(
+        StoreValidationError
+      );
+      await expect(store.setRepoSettings("" as any, "acme/widgets", {})).rejects.toThrow(
+        "Integration ID cannot be empty"
+      );
+    });
+
+    it("rejects empty repo on setRepoSettings", async () => {
+      await expect(store.setRepoSettings("github", "", {})).rejects.toThrow(StoreValidationError);
+      await expect(store.setRepoSettings("github", "", {})).rejects.toThrow(
+        "Repository identifier cannot be empty"
+      );
+    });
+
+    it("rejects empty integrationId on deleteRepoSettings", async () => {
+      await expect(store.deleteRepoSettings("" as any, "acme/widgets")).rejects.toThrow(
+        StoreValidationError
+      );
+      await expect(store.deleteRepoSettings("" as any, "acme/widgets")).rejects.toThrow(
+        "Integration ID cannot be empty"
+      );
+    });
+
+    it("rejects empty repo on deleteRepoSettings", async () => {
+      await expect(store.deleteRepoSettings("github", "")).rejects.toThrow(StoreValidationError);
+      await expect(store.deleteRepoSettings("github", "")).rejects.toThrow(
+        "Repository identifier cannot be empty"
+      );
+    });
+
+    it("rejects empty integrationId on listRepoSettings", async () => {
+      await expect(store.listRepoSettings("" as any)).rejects.toThrow(StoreValidationError);
+      await expect(store.listRepoSettings("" as any)).rejects.toThrow(
+        "Integration ID cannot be empty"
+      );
     });
   });
 
@@ -596,6 +669,22 @@ describe("IntegrationSettingsStore", () => {
 
       const config = await store.getResolvedConfig("github", "acme/widgets");
       expect(config.settings.commentActionInstructions).toBe("Repo comment instructions.");
+    });
+
+    it("rejects empty integrationId on getResolvedConfig", async () => {
+      await expect(store.getResolvedConfig("" as any, "acme/widgets")).rejects.toThrow(
+        StoreValidationError
+      );
+      await expect(store.getResolvedConfig("" as any, "acme/widgets")).rejects.toThrow(
+        "Integration ID cannot be empty"
+      );
+    });
+
+    it("rejects empty repo on getResolvedConfig", async () => {
+      await expect(store.getResolvedConfig("github", "")).rejects.toThrow(StoreValidationError);
+      await expect(store.getResolvedConfig("github", "")).rejects.toThrow(
+        "Repository identifier cannot be empty"
+      );
     });
   });
 
