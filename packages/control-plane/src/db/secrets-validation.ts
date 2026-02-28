@@ -32,10 +32,22 @@ export interface SecretMetadata {
   updatedAt: number;
 }
 
+/**
+ * Normalize a secret key to uppercase.
+ *
+ * @param key - Secret key to normalize
+ * @returns Uppercase version of the key
+ */
 export function normalizeKey(key: string): string {
   return key.toUpperCase();
 }
 
+/**
+ * Validate a secret key according to naming rules and reserved key restrictions.
+ *
+ * @param key - Secret key to validate
+ * @throws {SecretsValidationError} If key is empty, exceeds max length, has invalid characters, or is reserved
+ */
 export function validateKey(key: string): void {
   if (!key || key.length > MAX_KEY_LENGTH)
     throw new SecretsValidationError("Key too long or empty");
@@ -45,6 +57,12 @@ export function validateKey(key: string): void {
     throw new SecretsValidationError(`Key '${key}' is reserved`);
 }
 
+/**
+ * Validate a secret value for type and size constraints.
+ *
+ * @param value - Secret value to validate
+ * @throws {SecretsValidationError} If value is not a string or exceeds maximum size
+ */
 export function validateValue(value: string): void {
   if (typeof value !== "string") throw new SecretsValidationError("Value must be a string");
   const bytes = new TextEncoder().encode(value).length;
@@ -55,6 +73,11 @@ export function validateValue(value: string): void {
 /**
  * Merge global and repo secrets. Repo keys override global keys (case-insensitive).
  * Returns the merged record, total byte size, and whether the combined payload exceeds the limit.
+ *
+ * @param global - Global secrets record
+ * @param repo - Repository-specific secrets record
+ * @param maxCombinedBytes - Maximum allowed total byte size (default: 131072)
+ * @returns Object containing merged secrets, total bytes, and whether limit is exceeded
  */
 export function mergeSecrets(
   global: Record<string, string>,
