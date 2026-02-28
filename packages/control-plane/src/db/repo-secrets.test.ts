@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { webcrypto } from "node:crypto";
 import { RepoSecretsStore } from "./repo-secrets";
 import { SecretsValidationError } from "./secrets-validation";
+import { StoreValidationError } from "./errors";
 import { generateEncryptionKey } from "../auth/crypto";
 
 let didPolyfillCrypto = false;
@@ -235,5 +236,88 @@ describe("RepoSecretsStore", () => {
     expect(deleted).toBe(true);
     const secrets = await store.getDecryptedSecrets(1);
     expect(secrets).toEqual({});
+  });
+
+  describe("validation errors", () => {
+    it("rejects empty repoOwner in setSecrets", async () => {
+      await expect(store.setSecrets(1, "", "repo", { FOO: "bar" })).rejects.toThrow(
+        StoreValidationError
+      );
+      await expect(store.setSecrets(1, "", "repo", { FOO: "bar" })).rejects.toThrow(
+        "Repository owner cannot be empty"
+      );
+    });
+
+    it("rejects whitespace-only repoOwner in setSecrets", async () => {
+      await expect(store.setSecrets(1, "   ", "repo", { FOO: "bar" })).rejects.toThrow(
+        StoreValidationError
+      );
+      await expect(store.setSecrets(1, "   ", "repo", { FOO: "bar" })).rejects.toThrow(
+        "Repository owner cannot be empty"
+      );
+    });
+
+    it("rejects empty repoName in setSecrets", async () => {
+      await expect(store.setSecrets(1, "owner", "", { FOO: "bar" })).rejects.toThrow(
+        StoreValidationError
+      );
+      await expect(store.setSecrets(1, "owner", "", { FOO: "bar" })).rejects.toThrow(
+        "Repository name cannot be empty"
+      );
+    });
+
+    it("rejects whitespace-only repoName in setSecrets", async () => {
+      await expect(store.setSecrets(1, "owner", "   ", { FOO: "bar" })).rejects.toThrow(
+        StoreValidationError
+      );
+      await expect(store.setSecrets(1, "owner", "   ", { FOO: "bar" })).rejects.toThrow(
+        "Repository name cannot be empty"
+      );
+    });
+
+    it("rejects empty secrets object in setSecrets", async () => {
+      await expect(store.setSecrets(1, "owner", "repo", {})).rejects.toThrow(StoreValidationError);
+      await expect(store.setSecrets(1, "owner", "repo", {})).rejects.toThrow(
+        "Secrets object cannot be empty"
+      );
+    });
+
+    it("rejects empty key in deleteSecret", async () => {
+      await expect(store.deleteSecret(1, "")).rejects.toThrow(StoreValidationError);
+      await expect(store.deleteSecret(1, "")).rejects.toThrow("Secret key cannot be empty");
+    });
+
+    it("rejects whitespace-only key in deleteSecret", async () => {
+      await expect(store.deleteSecret(1, "   ")).rejects.toThrow(StoreValidationError);
+      await expect(store.deleteSecret(1, "   ")).rejects.toThrow("Secret key cannot be empty");
+    });
+  });
+
+  describe("successful operations", () => {
+    it("successfully sets and retrieves secrets", async () => {
+      const result = await store.setSecrets(1, "Owner", "Repo", { FOO: "bar", BAZ: "qux" });
+      expect(result.created).toBe(2);
+      expect(result.updated).toBe(0);
+      expect(result.keys).toEqual(["FOO", "BAZ"]);
+
+      const secrets = await store.getDecryptedSecrets(1);
+      expect(secrets).toEqual({ FOO: "bar", BAZ: "qux" });
+    });
+
+    it("successfully lists secret keys", async () => {
+      await store.setSecrets(1, "Owner", "Repo", { ALPHA: "1", BETA: "2" });
+      const keys = await store.listSecretKeys(1);
+      expect(keys.map((k) => k.key)).toEqual(["ALPHA", "BETA"]);
+      expect(keys[0].createdAt).toBeTypeOf("number");
+      expect(keys[0].updatedAt).toBeTypeOf("number");
+    });
+
+    it("successfully deletes a secret", async () => {
+      await store.setSecrets(1, "Owner", "Repo", { ALPHA: "1" });
+      const deleted = await store.deleteSecret(1, "alpha");
+      expect(deleted).toBe(true);
+      const secrets = await store.getDecryptedSecrets(1);
+      expect(secrets).toEqual({});
+    });
   });
 });
