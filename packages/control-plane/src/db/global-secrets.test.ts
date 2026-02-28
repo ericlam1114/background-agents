@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { webcrypto } from "node:crypto";
 import { GlobalSecretsStore } from "./global-secrets";
 import { SecretsValidationError } from "./secrets-validation";
+import { StoreValidationError } from "./errors";
 import { generateEncryptionKey } from "../auth/crypto";
 
 let didPolyfillCrypto = false;
@@ -209,5 +210,50 @@ describe("GlobalSecretsStore", () => {
   it("returns false when deleting nonexistent key", async () => {
     const deleted = await store.deleteSecret("NOPE");
     expect(deleted).toBe(false);
+  });
+
+  describe("validation errors", () => {
+    it("rejects empty secrets object in setSecrets", async () => {
+      await expect(store.setSecrets({})).rejects.toThrow(StoreValidationError);
+      await expect(store.setSecrets({})).rejects.toThrow("Secrets object cannot be empty");
+    });
+
+    it("rejects empty key in deleteSecret", async () => {
+      await expect(store.deleteSecret("")).rejects.toThrow(StoreValidationError);
+      await expect(store.deleteSecret("")).rejects.toThrow("Secret key cannot be empty");
+    });
+
+    it("rejects whitespace-only key in deleteSecret", async () => {
+      await expect(store.deleteSecret("   ")).rejects.toThrow(StoreValidationError);
+      await expect(store.deleteSecret("   ")).rejects.toThrow("Secret key cannot be empty");
+    });
+  });
+
+  describe("successful operations", () => {
+    it("successfully sets and retrieves secrets", async () => {
+      const result = await store.setSecrets({ FOO: "bar", BAZ: "qux" });
+      expect(result.created).toBe(2);
+      expect(result.updated).toBe(0);
+      expect(result.keys).toEqual(["FOO", "BAZ"]);
+
+      const secrets = await store.getDecryptedSecrets();
+      expect(secrets).toEqual({ FOO: "bar", BAZ: "qux" });
+    });
+
+    it("successfully lists secret keys", async () => {
+      await store.setSecrets({ ALPHA: "1", BETA: "2" });
+      const keys = await store.listSecretKeys();
+      expect(keys).toHaveLength(2);
+      expect(keys.map((k) => k.key)).toEqual(["ALPHA", "BETA"]);
+    });
+
+    it("successfully deletes existing secret", async () => {
+      await store.setSecrets({ TO_DELETE: "value" });
+      const deleted = await store.deleteSecret("TO_DELETE");
+      expect(deleted).toBe(true);
+
+      const secrets = await store.getDecryptedSecrets();
+      expect(secrets).toEqual({});
+    });
   });
 });
