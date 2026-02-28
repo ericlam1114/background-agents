@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { webcrypto } from "node:crypto";
 import { UserScmTokenStore } from "./user-scm-tokens";
+import { StoreValidationError } from "./errors";
 import { generateEncryptionKey } from "../auth/crypto";
 
 let didPolyfillCrypto = false;
@@ -265,6 +266,187 @@ describe("UserScmTokenStore", () => {
       const expiresAt = Date.now() + 30_000;
       expect(store.isTokenFresh(expiresAt, 10_000)).toBe(true);
       expect(store.isTokenFresh(expiresAt, 60_000)).toBe(false);
+    });
+  });
+
+  describe("validation errors", () => {
+    describe("getTokens", () => {
+      it("rejects empty providerUserId", async () => {
+        await expect(store.getTokens("")).rejects.toThrow(StoreValidationError);
+        await expect(store.getTokens("")).rejects.toThrow("Provider user ID cannot be empty");
+      });
+
+      it("rejects whitespace-only providerUserId", async () => {
+        await expect(store.getTokens("   ")).rejects.toThrow(StoreValidationError);
+        await expect(store.getTokens("   ")).rejects.toThrow("Provider user ID cannot be empty");
+      });
+    });
+
+    describe("upsertTokens", () => {
+      const expiresAt = Date.now() + 3600_000;
+
+      it("rejects empty providerUserId", async () => {
+        await expect(
+          store.upsertTokens("", "access-token", "refresh-token", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.upsertTokens("", "access-token", "refresh-token", expiresAt)
+        ).rejects.toThrow("Provider user ID cannot be empty");
+      });
+
+      it("rejects whitespace-only providerUserId", async () => {
+        await expect(
+          store.upsertTokens("   ", "access-token", "refresh-token", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.upsertTokens("   ", "access-token", "refresh-token", expiresAt)
+        ).rejects.toThrow("Provider user ID cannot be empty");
+      });
+
+      it("rejects empty accessToken", async () => {
+        await expect(
+          store.upsertTokens("user-123", "", "refresh-token", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.upsertTokens("user-123", "", "refresh-token", expiresAt)
+        ).rejects.toThrow("Access token cannot be empty");
+      });
+
+      it("rejects whitespace-only accessToken", async () => {
+        await expect(
+          store.upsertTokens("user-123", "   ", "refresh-token", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.upsertTokens("user-123", "   ", "refresh-token", expiresAt)
+        ).rejects.toThrow("Access token cannot be empty");
+      });
+
+      it("rejects empty refreshToken", async () => {
+        await expect(store.upsertTokens("user-123", "access-token", "", expiresAt)).rejects.toThrow(
+          StoreValidationError
+        );
+        await expect(store.upsertTokens("user-123", "access-token", "", expiresAt)).rejects.toThrow(
+          "Refresh token cannot be empty"
+        );
+      });
+
+      it("rejects whitespace-only refreshToken", async () => {
+        await expect(
+          store.upsertTokens("user-123", "access-token", "   ", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.upsertTokens("user-123", "access-token", "   ", expiresAt)
+        ).rejects.toThrow("Refresh token cannot be empty");
+      });
+    });
+
+    describe("casUpdateTokens", () => {
+      const expiresAt = Date.now() + 3600_000;
+
+      it("rejects empty providerUserId", async () => {
+        await expect(
+          store.casUpdateTokens("", "expected-enc", "new-access", "new-refresh", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.casUpdateTokens("", "expected-enc", "new-access", "new-refresh", expiresAt)
+        ).rejects.toThrow("Provider user ID cannot be empty");
+      });
+
+      it("rejects whitespace-only providerUserId", async () => {
+        await expect(
+          store.casUpdateTokens("   ", "expected-enc", "new-access", "new-refresh", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.casUpdateTokens("   ", "expected-enc", "new-access", "new-refresh", expiresAt)
+        ).rejects.toThrow("Provider user ID cannot be empty");
+      });
+
+      it("rejects empty expectedRefreshTokenEncrypted", async () => {
+        await expect(
+          store.casUpdateTokens("user-123", "", "new-access", "new-refresh", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.casUpdateTokens("user-123", "", "new-access", "new-refresh", expiresAt)
+        ).rejects.toThrow("Expected refresh token cannot be empty");
+      });
+
+      it("rejects whitespace-only expectedRefreshTokenEncrypted", async () => {
+        await expect(
+          store.casUpdateTokens("user-123", "   ", "new-access", "new-refresh", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.casUpdateTokens("user-123", "   ", "new-access", "new-refresh", expiresAt)
+        ).rejects.toThrow("Expected refresh token cannot be empty");
+      });
+
+      it("rejects empty newAccessToken", async () => {
+        await expect(
+          store.casUpdateTokens("user-123", "expected-enc", "", "new-refresh", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.casUpdateTokens("user-123", "expected-enc", "", "new-refresh", expiresAt)
+        ).rejects.toThrow("New access token cannot be empty");
+      });
+
+      it("rejects whitespace-only newAccessToken", async () => {
+        await expect(
+          store.casUpdateTokens("user-123", "expected-enc", "   ", "new-refresh", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.casUpdateTokens("user-123", "expected-enc", "   ", "new-refresh", expiresAt)
+        ).rejects.toThrow("New access token cannot be empty");
+      });
+
+      it("rejects empty newRefreshToken", async () => {
+        await expect(
+          store.casUpdateTokens("user-123", "expected-enc", "new-access", "", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.casUpdateTokens("user-123", "expected-enc", "new-access", "", expiresAt)
+        ).rejects.toThrow("New refresh token cannot be empty");
+      });
+
+      it("rejects whitespace-only newRefreshToken", async () => {
+        await expect(
+          store.casUpdateTokens("user-123", "expected-enc", "new-access", "   ", expiresAt)
+        ).rejects.toThrow(StoreValidationError);
+        await expect(
+          store.casUpdateTokens("user-123", "expected-enc", "new-access", "   ", expiresAt)
+        ).rejects.toThrow("New refresh token cannot be empty");
+      });
+    });
+  });
+
+  describe("successful operations", () => {
+    it("successfully upserts and gets tokens", async () => {
+      const expiresAt = Date.now() + 3600_000;
+      await store.upsertTokens("user-123", "access-abc", "refresh-xyz", expiresAt);
+
+      const result = await store.getTokens("user-123");
+      expect(result).not.toBeNull();
+      expect(result!.accessToken).toBe("access-abc");
+      expect(result!.refreshToken).toBe("refresh-xyz");
+      expect(result!.expiresAt).toBe(expiresAt);
+    });
+
+    it("successfully performs CAS update", async () => {
+      const expiresAt = Date.now() + 3600_000;
+      await store.upsertTokens("user-123", "access-old", "refresh-old", expiresAt);
+
+      const tokens = await store.getTokens("user-123");
+      const casResult = await store.casUpdateTokens(
+        "user-123",
+        tokens!.refreshTokenEncrypted,
+        "access-new",
+        "refresh-new",
+        expiresAt + 3600_000
+      );
+
+      expect(casResult).toEqual({ ok: true });
+
+      const updated = await store.getTokens("user-123");
+      expect(updated!.accessToken).toBe("access-new");
+      expect(updated!.refreshToken).toBe("refresh-new");
     });
   });
 });
