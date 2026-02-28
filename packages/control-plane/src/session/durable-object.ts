@@ -63,6 +63,7 @@ import { SessionPullRequestService } from "./pull-request-service";
 import { RepoSecretsStore } from "../db/repo-secrets";
 import { GlobalSecretsStore } from "../db/global-secrets";
 import { mergeSecrets } from "../db/secrets-validation";
+import { StoreOperationError } from "../db/errors";
 import { OpenAITokenRefreshService } from "./openai-token-refresh-service";
 import { ParticipantService, getAvatarUrl } from "./participant-service";
 import { UserScmTokenStore } from "../db/user-scm-tokens";
@@ -1386,9 +1387,16 @@ export class SessionDO extends DurableObject<Env> {
       const globalStore = new GlobalSecretsStore(this.env.DB, this.env.REPO_SECRETS_ENCRYPTION_KEY);
       globalSecrets = await globalStore.getDecryptedSecrets();
     } catch (e) {
-      this.log.error("Failed to load global secrets, proceeding without", {
-        error: e instanceof Error ? e.message : String(e),
-      });
+      if (e instanceof StoreOperationError) {
+        this.log.error("Failed to load global secrets, proceeding without", {
+          error: e.message,
+          cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+        });
+      } else {
+        this.log.error("Failed to load global secrets, proceeding without", {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
     }
 
     // Fetch repo secrets
@@ -1398,11 +1406,20 @@ export class SessionDO extends DurableObject<Env> {
       const repoStore = new RepoSecretsStore(this.env.DB, this.env.REPO_SECRETS_ENCRYPTION_KEY);
       repoSecrets = await repoStore.getDecryptedSecrets(repoId);
     } catch (e) {
-      this.log.warn("Failed to load repo secrets, proceeding without", {
-        repo_owner: session.repo_owner,
-        repo_name: session.repo_name,
-        error: e instanceof Error ? e.message : String(e),
-      });
+      if (e instanceof StoreOperationError) {
+        this.log.warn("Failed to load repo secrets, proceeding without", {
+          repo_owner: session.repo_owner,
+          repo_name: session.repo_name,
+          error: e.message,
+          cause: e.cause instanceof Error ? e.cause.message : String(e.cause),
+        });
+      } else {
+        this.log.warn("Failed to load repo secrets, proceeding without", {
+          repo_owner: session.repo_owner,
+          repo_name: session.repo_name,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
     }
 
     // Merge: repo overrides global
